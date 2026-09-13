@@ -4,9 +4,9 @@ import { DepositDocument } from '../db/models/Deposit';
 import { UserDocument } from '../db/models/User';
 import { SystemConfigDocument } from '../db/models/SystemConfig';
 import { DepositStatus, PaymentGateway } from '@premium-store/shared';
+import { FirebaseService } from './firebaseService';
 
 export class DepositService {
-  // Submit new manual deposit request
   static async createDepositRequest(
     userId: string,
     amount: number,
@@ -21,7 +21,6 @@ export class DepositService {
     const cleanTxnId = transactionId.trim().toUpperCase();
     const db = getDB();
 
-    // Check for duplicate Transaction ID
     const existingDeposit = await db.collection<DepositDocument>('deposits').findOne({
       transactionId: cleanTxnId,
     });
@@ -51,7 +50,6 @@ export class DepositService {
     return { ...newDeposit, _id: result.insertedId };
   }
 
-  // Get user deposit history
   static async getUserDeposits(userId: string) {
     const db = getDB();
     return db
@@ -61,7 +59,6 @@ export class DepositService {
       .toArray();
   }
 
-  // Admin: Get all pending deposit requests
   static async getPendingDeposits() {
     const db = getDB();
     return db
@@ -71,9 +68,9 @@ export class DepositService {
       .toArray();
   }
 
-  // Admin: Approve deposit request with ACID Transaction balance update
+  // Admin Approve Deposit with Live Firebase Sync
   static async approveDeposit(depositId: string, adminUserId: string) {
-    return withTransaction(async (session) => {
+    const result = await withTransaction(async (session) => {
       const db = getDB();
       const depObjId = new ObjectId(depositId);
 
@@ -85,7 +82,6 @@ export class DepositService {
         throw new Error('Deposit request not found or already processed');
       }
 
-      // Update Deposit status
       await db.collection<DepositDocument>('deposits').updateOne(
         { _id: depObjId },
         {
@@ -98,39 +94,69 @@ export class DepositService {
         { session }
       );
 
-      // Increment User Balance
-      await db.collection<UserDocument>('users').updateOne(
+      const updatedUser = await db.collection<UserDocument>('users').findOneAndUpdate(
         { _id: deposit.userId },
         { $inc: { balance: deposit.amount }, $set: { updatedAt: new Date() } },
-        { session }
+        { session, returnDocument: 'after' }
       );
 
-      return { success: true, amount: deposit.amount, userId: deposit.userId };
+      return {
+        success: true,
+        amount: deposit.amount,
+        userId: deposit.userId,
+        telegramId: deposit.telegramId,
+        newBalance: updatedUser?.balance ?? 0,
+      };
     });
+
+    // Fire & Forget Realtime Sync
+    if (result.telegramId) {
+      FirebaseService.syncUserBalance(result.telegramId, result.newBalance);
+      FirebaseService.sendNotification(result.telegramId, {
+        title: 'Deposit Approved! 🎉',
+        message: `Your deposit of ৳${result.amount} has been approved. New balance: ৳${result.newBalance}`,
+        type: 'SUCCESS',
+      });
+    }
+
+    return result;
   }
 
-  // Admin: Reject deposit request
+  // Admin Reject Deposit with Live Firebase Notification
   static async rejectDeposit(depositId: string, rejectionReason?: string) {
     const db = getDB();
-    const result = await db.collection<DepositDocument>('deposits').updateOne(
-      { _id: new ObjectId(depositId), status: DepositStatus.PENDING },
+    const depObjId = new ObjectId(depositId);
+
+    const deposit = await db.collection<DepositDocument>('deposits').findOne({ _id: depObjId });
+    if (!deposit || deposit.status !== DepositStatus.PENDING) {
+      throw new Error('Deposit request not found or already processed');
+    }
+
+    const reason = rejectionReason || 'Invalid Transaction ID or mismatching amount';
+
+    await db.collection<DepositDocument>('deposits').updateOne(
+      { _id: depObjId },
       {
         $set: {
           status: DepositStatus.REJECTED,
-          rejectionReason: rejectionReason || 'Invalid Transaction ID or mismatching amount',
+          rejectionReason: reason,
           updatedAt: new Date(),
         },
       }
     );
 
-    if (result.matchedCount === 0) {
-      throw new Error('Deposit request not found or already processed');
+    // Live Notification Push
+    if (deposit.telegramId) {
+      FirebaseService.sendNotification(deposit.telegramId, {
+        title: 'Deposit Rejected ❌',
+        message: `Your deposit request for Txn ID ${deposit.transactionId} was rejected. Reason: ${reason}`,
+        type: 'WARNING',
+      });
     }
 
     return { success: true };
   }
 
-  // Get configured payment method numbers for customer
   static async getPaymentMethods() {
     const db = getDB();
     const config = await db.collection<SystemConfigDocument>('system_config').findOne({});
