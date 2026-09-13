@@ -5,6 +5,8 @@ import fastifyJwt from '@fastify/jwt';
 import { connectDB } from './db';
 import { createDatabaseIndexes } from './db/indexes';
 import { authRoutes } from './routes/authRoutes';
+import { productRoutes } from './routes/productRoutes';
+import { inventoryRoutes } from './routes/inventoryRoutes';
 
 export async function buildApp() {
   const fastify = Fastify({
@@ -43,6 +45,8 @@ export async function buildApp() {
 
   // Register Application Routes
   await fastify.register(authRoutes);
+  await fastify.register(productRoutes);
+  await fastify.register(inventoryRoutes);
 
   // Health Check Endpoint
   fastify.get('/health', async () => {
