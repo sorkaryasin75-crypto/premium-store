@@ -1,18 +1,28 @@
-'use client';
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { TelegramThemeProvider } from '@/components/providers/TelegramThemeProvider';
 
-import React from 'react';
-import { Header } from './Header';
-import { Navbar } from './Navbar';
+const inter = Inter({ subsets: ['latin'] });
 
-export const AppLayout: React.FC<{ children: React.ReactNode; userBalance?: number }> = ({
-  children,
-  userBalance = 0,
-}) => {
-  return (
-    <div className="flex flex-col min-h-screen pb-20">
-      <Header userBalance={userBalance} />
-      <main className="flex-1 max-w-md w-full mx-auto p-4">{children}</main>
-      <Navbar />
-    </div>
-  );
+export const metadata: Metadata = {
+  title: 'Premium Digital Store',
+  description: 'Instant Auto-Delivery Digital Products Store Mini App',
 };
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="dark">
+      <head>
+        <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+      </head>
+      <body className={inter.className}>
+        <TelegramThemeProvider>{children}</TelegramThemeProvider>
+      </body>
+    </html>
+  );
+}
