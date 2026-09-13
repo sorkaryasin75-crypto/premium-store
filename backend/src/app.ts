@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import fastifyJwt from '@fastify/jwt';
 import { connectDB } from './db';
 import { createDatabaseIndexes } from './db/indexes';
+import { initFirebase } from './services/firebaseService';
 import { authRoutes } from './routes/authRoutes';
 import { productRoutes } from './routes/productRoutes';
 import { inventoryRoutes } from './routes/inventoryRoutes';
@@ -40,8 +41,9 @@ export async function buildApp() {
   try {
     const { db } = await connectDB();
     await createDatabaseIndexes(db);
+    initFirebase(); // Initialize Firebase Admin SDK
   } catch (error) {
-    fastify.log.error('Failed to initialize MongoDB connection', error);
+    fastify.log.error('Failed to initialize database or services', error);
     process.exit(1);
   }
 
