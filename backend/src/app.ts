@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import { connectDB } from './db';
+import { createDatabaseIndexes } from './db/indexes';
 
 export async function buildApp() {
   const fastify = Fastify({
@@ -10,12 +12,9 @@ export async function buildApp() {
     trustProxy: true,
   });
 
-  // Security Hardening Headers
-  await fastify.register(helmet, {
-    contentSecurityPolicy: false,
-  });
-
-  // CORS Configuration
+  // Security & CORS
+  await fastify.register(helmet, { contentSecurityPolicy: false });
+  
   const origins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',')
     : ['http://localhost:3000', 'http://localhost:3001'];
@@ -25,6 +24,15 @@ export async function buildApp() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   });
+
+  // Initialize Database Connection & Ensure Indexes
+  try {
+    const { db } = await connectDB();
+    await createDatabaseIndexes(db);
+  } catch (error) {
+    fastify.log.error('Failed to initialize MongoDB connection', error);
+    process.exit(1);
+  }
 
   // Health Check Endpoint
   fastify.get('/health', async () => {
