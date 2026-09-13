@@ -8,6 +8,7 @@ import { authRoutes } from './routes/authRoutes';
 import { productRoutes } from './routes/productRoutes';
 import { inventoryRoutes } from './routes/inventoryRoutes';
 import { orderRoutes } from './routes/orderRoutes';
+import { depositRoutes } from './routes/depositRoutes';
 
 export async function buildApp() {
   const fastify = Fastify({
@@ -49,6 +50,7 @@ export async function buildApp() {
   await fastify.register(productRoutes);
   await fastify.register(inventoryRoutes);
   await fastify.register(orderRoutes);
+  await fastify.register(depositRoutes);
 
   // Health Check Endpoint
   fastify.get('/health', async () => {
